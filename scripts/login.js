@@ -1,5 +1,5 @@
 (function () {
-  const API_BASE = "http://localhost:3000/api";
+  const API_BASE = "/api";
   const form = document.getElementById("auth-form");
   const registerBtn = document.getElementById("register-btn");
   const statusEl = document.getElementById("auth-status");
