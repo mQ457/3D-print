@@ -24,11 +24,11 @@ Render имеет бесплатный тариф, поддерживает Node
 1. Зарегистрируйтесь на `https://render.com`.
 2. Создайте новый Web Service.
 3. Подключите свой GitHub/GitLab репозиторий или выберите `Manual Deploy`.
-4. Укажите корневую папку репозитория (если вы разворачиваете весь проект, достаточно корня).
+4. Укажите корневую папку репозитория `server` (важно: именно папку `server`).
 5. В поле Build Command используйте:
-   - `cd server && npm install`
+   - `npm install`
 6. В поле Start Command используйте:
-   - `cd server && npm start`
+   - `npm start`
 7. В настройках Environment Variables добавьте:
    - `PORT=3000`
    - `DATABASE_FILE=./data/app.db`
@@ -36,7 +36,7 @@ Render имеет бесплатный тариф, поддерживает Node
    - `CORS_ORIGIN=https://<ваш-сервис>.onrender.com`
    - `NODE_ENV=production`
 
-Важно: на Render статические файлы уже обслуживаются из корня проекта, потому что сервер в `server/src/index.js` использует `express.static(webRoot)`.
+Статические файлы (HTML, CSS, JS) будут обслуживаться из корня проекта автоматически.
 
 ### Альтернативы
 
