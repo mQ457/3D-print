@@ -2830,11 +2830,11 @@ button.model-panel__file-name {
 
   .landing-hero__title,
   .landing-hero__title-accent {
-    font-size: clamp(36px, 11vw, 44px);
-    line-height: 1.04;
-    letter-spacing: -0.2px;
-    overflow-wrap: anywhere;
-    word-break: break-word;
+    font-size: clamp(26px, 8.8vw, 34px);
+    line-height: 1.1;
+    letter-spacing: -0.1px;
+    overflow-wrap: normal;
+    word-break: normal;
   }
 
   .landing-hero__subtitle {
@@ -2852,7 +2852,13 @@ button.model-panel__file-name {
   }
 
   .landing-img-slot--printer {
-    height: min(66vw, 320px);
+    width: 100%;
+    max-width: 360px;
+    aspect-ratio: 4 / 3;
+    height: auto;
+    background-size: contain;
+    background-repeat: no-repeat;
+    background-color: #fff;
   }
 
   .landing-header--scrolled {
