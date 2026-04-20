@@ -514,6 +514,15 @@
     sessionStorage.setItem("checkout_payload", JSON.stringify(payload));
   }
 
+  function redirectToLoginForCheckout() {
+    try {
+      sessionStorage.setItem("app.postLoginRedirect", "checkout.html");
+    } catch (_error) {
+      // noop
+    }
+    window.location.href = "login.html?next=checkout.html";
+  }
+
   function initCheckoutLinks() {
     checkoutLinks.forEach((link) => {
       link.addEventListener("click", async (e) => {
@@ -529,7 +538,7 @@
           } catch (err) {
             if (err.status === 401) {
               if (status) status.textContent = "Войдите в аккаунт, чтобы прикрепить файл к заказу.";
-              window.location.href = "login.html";
+              redirectToLoginForCheckout();
               return;
             }
             if (status) status.textContent = err.message || "Не удалось сохранить файл.";

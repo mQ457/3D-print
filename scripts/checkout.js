@@ -1,6 +1,10 @@
 (function () {
   const API = window.AppBootstrap;
+  const POST_LOGIN_REDIRECT_KEY = "app.postLoginRedirect";
   const form = document.querySelector("form.card-form-grid");
+  const cardInput = form?.elements?.card;
+  const expInput = form?.elements?.exp;
+  const cvcInput = form?.elements?.cvc;
   const statusEl = document.createElement("div");
   statusEl.style.color = "#f87171";
   statusEl.style.marginTop = "12px";
@@ -19,6 +23,89 @@
     }
   }
 
+  function rememberPostLoginRedirect(target) {
+    try {
+      sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, String(target || "checkout.html"));
+    } catch (_error) {
+      // noop
+    }
+  }
+
+  function redirectToLoginForCheckout() {
+    rememberPostLoginRedirect("checkout.html");
+    window.location.replace("login.html?next=checkout.html");
+  }
+
+  function normalizeDigits(value) {
+    return String(value || "").replace(/\D/g, "");
+  }
+
+  function formatCardNumber(value) {
+    const digits = normalizeDigits(value).slice(0, 16);
+    return digits.replace(/(\d{4})(?=\d)/g, "$1 ").trim();
+  }
+
+  function formatExpValue(value) {
+    const digits = normalizeDigits(value).slice(0, 4);
+    if (digits.length < 3) return digits;
+    return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  }
+
+  function setupCardInputs() {
+    if (cardInput) {
+      cardInput.setAttribute("inputmode", "numeric");
+      cardInput.setAttribute("autocomplete", "cc-number");
+      cardInput.maxLength = 19;
+      cardInput.addEventListener("input", () => {
+        cardInput.value = formatCardNumber(cardInput.value);
+      });
+    }
+    if (expInput) {
+      expInput.setAttribute("inputmode", "numeric");
+      expInput.setAttribute("autocomplete", "cc-exp");
+      expInput.maxLength = 5;
+      expInput.addEventListener("input", () => {
+        expInput.value = formatExpValue(expInput.value);
+      });
+    }
+    if (cvcInput) {
+      cvcInput.setAttribute("inputmode", "numeric");
+      cvcInput.setAttribute("autocomplete", "cc-csc");
+      cvcInput.maxLength = 3;
+      cvcInput.addEventListener("input", () => {
+        cvcInput.value = normalizeDigits(cvcInput.value).slice(0, 3);
+      });
+    }
+  }
+
+  function validateCardForm() {
+    const cardNumber = normalizeDigits(cardInput?.value || "");
+    const expDigits = normalizeDigits(expInput?.value || "");
+    const cvc = normalizeDigits(cvcInput?.value || "");
+
+    if (cardNumber.length !== 16) {
+      return { ok: false, message: "Введите корректный номер карты (16 цифр)." };
+    }
+    if (expDigits.length !== 4) {
+      return { ok: false, message: "Введите срок действия карты в формате ММ/ГГ." };
+    }
+    const month = Number(expDigits.slice(0, 2));
+    const year = Number(expDigits.slice(2));
+    if (month < 1 || month > 12) {
+      return { ok: false, message: "Месяц срока действия должен быть от 01 до 12." };
+    }
+    const now = new Date();
+    const currentYear = Number(String(now.getFullYear()).slice(-2));
+    const currentMonth = now.getMonth() + 1;
+    if (year < currentYear || (year === currentYear && month < currentMonth)) {
+      return { ok: false, message: "Срок действия карты истек." };
+    }
+    if (cvc.length !== 3) {
+      return { ok: false, message: "Введите корректный CVC (3 цифры)." };
+    }
+    return { ok: true, cardNumber, month, year };
+  }
+
   function syncSummary() {
     const payload = getPayload();
     const total = Number(payload.totalAmount || 0);
@@ -32,13 +119,11 @@
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     setStatus("Обрабатываем оплату...", false);
-    const cardNumber = String(form.elements.card.value || "").replace(/\D/g, "").trim();
-    const exp = String(form.elements.exp.value || "").trim();
-    const expParts = exp.split("/").map((item) => Number(item.trim() || 0));
+    const validation = validateCardForm();
     const payload = getPayload();
 
-    if (!cardNumber) {
-      setStatus("Введите номер карты.", true);
+    if (!validation.ok) {
+      setStatus(validation.message, true);
       return;
     }
 
@@ -50,10 +135,10 @@
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            cardNumber,
+            cardNumber: validation.cardNumber,
             holderName: "CARD HOLDER",
-            expMonth: expParts[0] || null,
-            expYear: expParts[1] ? 2000 + expParts[1] : null,
+            expMonth: validation.month,
+            expYear: 2000 + validation.year,
             isDefault: true,
           }),
         });
@@ -73,7 +158,7 @@
       window.location.href = "orders.html";
     } catch (error) {
       if (error.status === 401) {
-        window.location.href = "login.html";
+        redirectToLoginForCheckout();
         return;
       }
       setStatus(error.message, true);
@@ -86,6 +171,8 @@
       syncSummary();
     })
     .catch((error) => {
-      if (error.status === 401) window.location.href = "login.html";
+      if (error.status === 401) redirectToLoginForCheckout();
     });
+
+  setupCardInputs();
 })();

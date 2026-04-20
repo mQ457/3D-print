@@ -70,7 +70,7 @@
                 <div class="two-cols">
                   <label class="field">
                     <span class="label">Номер карты</span>
-                    <input class="input" type="text" name="cardNumber" placeholder="0000 0000 0000 0000" />
+                    <input class="input" type="text" name="cardNumber" inputmode="numeric" autocomplete="cc-number" maxlength="19" placeholder="0000 0000 0000 0000" />
                   </label>
                   <label class="field">
                     <span class="label">Владелец</span>
@@ -80,11 +80,11 @@
                 <div class="two-cols" style="margin-top:8px;">
                   <label class="field">
                     <span class="label">Месяц</span>
-                    <input class="input" type="number" name="expMonth" min="1" max="12" />
+                    <input class="input" type="text" name="expMonth" inputmode="numeric" maxlength="2" placeholder="MM" />
                   </label>
                   <label class="field">
                     <span class="label">Год</span>
-                    <input class="input" type="number" name="expYear" min="2026" max="2099" />
+                    <input class="input" type="text" name="expYear" inputmode="numeric" maxlength="4" placeholder="YYYY" />
                   </label>
                 </div>
                 <button class="btn btn-primary" type="submit" style="margin-top:8px;">Сохранить карту</button>

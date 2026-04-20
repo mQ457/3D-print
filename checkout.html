@@ -33,17 +33,17 @@
         <form action="#" method="post" class="card-form-grid">
           <label class="field">
             <span class="label">Номер карты</span>
-            <input class="input" type="text" name="card" placeholder="0000 0000 0000 0000" />
+            <input class="input" type="text" name="card" inputmode="numeric" autocomplete="cc-number" maxlength="19" placeholder="0000 0000 0000 0000" required />
           </label>
 
           <div class="inline-2">
             <label class="field">
               <span class="label">Срок</span>
-              <input class="input" type="text" name="exp" placeholder="MM/ГГ" />
+              <input class="input" type="text" name="exp" inputmode="numeric" autocomplete="cc-exp" maxlength="5" placeholder="MM/YY" required />
             </label>
             <label class="field">
               <span class="label">СVC</span>
-              <input class="input" type="text" name="cvc" placeholder="•••" />
+              <input class="input" type="text" name="cvc" inputmode="numeric" autocomplete="cc-csc" maxlength="3" placeholder="•••" required />
             </label>
           </div>
 

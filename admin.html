@@ -12,7 +12,7 @@
     <p style="color:#99a2be;">Используйте admin-аккаунт (телефон и пароль).</p>
     <form id="admin-login-form">
       <div style="display:grid;gap:8px;">
-        <input name="phone" type="text" placeholder="Телефон" required />
+        <input name="phone" type="tel" inputmode="numeric" maxlength="16" placeholder="+79991234567" required />
         <input name="password" type="password" placeholder="Пароль" required />
         <button class="btn-primary" type="submit">Войти</button>
       </div>

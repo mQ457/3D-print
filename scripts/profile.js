@@ -11,6 +11,7 @@
   const supportReplyForm = document.getElementById("support-reply-form");
   let activeThreadId = "";
   const sidebarName = document.getElementById("sidebar-name");
+  const emailInput = form?.elements?.email;
 
   function setStatus(message, isError) {
     if (!statusEl) return;
@@ -24,6 +25,22 @@
     form.elements.phone.value = profile.phone || "";
     form.elements.email.value = profile.email || "";
     sidebarName.textContent = profile.fullName || "Пользователь";
+  }
+
+  function isValidEmail(value) {
+    const email = String(value || "").trim();
+    if (!email) return true;
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  function setupProfileValidation() {
+    if (!emailInput) return;
+    emailInput.setAttribute("inputmode", "email");
+    emailInput.setAttribute("autocomplete", "email");
+    emailInput.addEventListener("blur", () => {
+      const value = String(emailInput.value || "").trim();
+      emailInput.value = value;
+    });
   }
 
   async function loadProfile() {
@@ -41,11 +58,16 @@
 
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
+    const email = String(form.elements.email.value || "").trim();
+    if (!isValidEmail(email)) {
+      setStatus("Введите корректный email.", true);
+      return;
+    }
     setStatus("Сохраняем данные...", false);
     try {
       const payload = {
         fullName: String(form.elements.fullName.value || "").trim(),
-        email: String(form.elements.email.value || "").trim(),
+        email,
       };
       const data = await API.request("/profile/me", {
         method: "PATCH",
@@ -165,4 +187,6 @@
         window.location.replace("login.html");
       }
     });
+
+  setupProfileValidation();
 })();

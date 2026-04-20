@@ -3,6 +3,7 @@
   const appBlock = document.getElementById("admin-app");
   const loginForm = document.getElementById("admin-login-form");
   const loginStatus = document.getElementById("admin-login-status");
+  const phoneInput = loginForm?.elements?.phone;
   const statsRoot = document.getElementById("dashboard-stats");
   const ordersRoot = document.getElementById("dashboard-orders");
   const refreshBtn = document.getElementById("refresh-dashboard");
@@ -11,6 +12,22 @@
   function formatDate(value) {
     if (!value) return "—";
     return new Date(value).toLocaleString("ru-RU");
+  }
+
+  function normalizePhone(value) {
+    return String(value || "")
+      .replace(/[^\d+]/g, "")
+      .replace(/(?!^)\+/g, "");
+  }
+
+  function setupPhoneValidation() {
+    if (!phoneInput) return;
+    phoneInput.setAttribute("inputmode", "numeric");
+    phoneInput.setAttribute("pattern", "^[+]?[0-9]{10,15}$");
+    phoneInput.maxLength = 16;
+    phoneInput.addEventListener("input", () => {
+      phoneInput.value = normalizePhone(phoneInput.value);
+    });
   }
 
   async function renderDashboard() {
@@ -56,11 +73,17 @@
     loginStatus.style.color = "#99a2be";
     try {
       const fd = new FormData(loginForm);
+      const phone = normalizePhone(fd.get("phone"));
+      if (!/^[+]?\d{10,15}$/.test(phone)) {
+        loginStatus.textContent = "Введите корректный номер телефона.";
+        loginStatus.style.color = "#ff7676";
+        return;
+      }
       await API.request("/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phone: String(fd.get("phone") || "").trim(),
+          phone,
           password: String(fd.get("password") || ""),
         }),
       });
@@ -72,5 +95,6 @@
   });
 
   refreshBtn?.addEventListener("click", renderDashboard);
+  setupPhoneValidation();
   tryOpenAdmin();
 })();

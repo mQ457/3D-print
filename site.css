@@ -26,6 +26,9 @@
 html,
 body {
   height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 body {
@@ -1811,6 +1814,7 @@ button.model-panel__file-name {
   background: #ffffff;
   color: #2c2c2c;
   min-height: 100vh;
+  overflow-x: clip;
 }
 
 /* На главной контейнер немного уже, как на макете */
@@ -2805,6 +2809,52 @@ button.model-panel__file-name {
 }
 
 @media (max-width: 720px) {
+  .landing-page .container {
+    width: calc(100% - 20px);
+  }
+
+  .landing-header__inner {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .landing-header__actions {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .landing-hero__left {
+    padding-left: 0;
+  }
+
+  .landing-hero__title,
+  .landing-hero__title-accent {
+    font-size: clamp(36px, 11vw, 44px);
+    line-height: 1.04;
+    letter-spacing: -0.2px;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .landing-hero__subtitle {
+    font-size: clamp(14px, 4.2vw, 16px);
+    line-height: 1.35;
+  }
+
+  .landing-hero__cta {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .landing-btn-small {
+    flex: 1 1 140px;
+  }
+
+  .landing-img-slot--printer {
+    height: min(66vw, 320px);
+  }
+
   .landing-header--scrolled {
     padding: 8px 10px 12px;
   }
