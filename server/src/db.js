@@ -24,7 +24,11 @@ const pool = new Pool({
 });
 
 function normalizeSql(sql) {
-  return String(sql || "").replace(/datetime\('now'\)/g, "NOW()");
+  let normalized = String(sql || "");
+  normalized = normalized.replace(/datetime\('now'\)/g, "NOW()");
+  normalized = normalized.replace(/datetime\(([^,()]+),\s*'localtime'\)/g, "($1)");
+  normalized = normalized.replace(/datetime\(([^()]+)\)/g, "($1)");
+  return normalized;
 }
 
 function splitSqlStatements(sql) {
