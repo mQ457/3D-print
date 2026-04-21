@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const db = require("../db");
+const { buildKnowledgeContext } = require("./support-knowledge");
 
 function cleanEnv(value, fallback = "") {
   const raw = String(value == null ? fallback : value).trim();
@@ -47,6 +48,7 @@ function wantsHumanByMessage(text) {
 }
 
 function buildPrompt({ subject, userMessage, history }) {
+  const knowledgeContext = buildKnowledgeContext(userMessage);
   const dialogue = history
     .slice(-12)
     .map((item) => `${item.senderType === "user" ? "Клиент" : "Поддержка"}: ${item.message}`)
@@ -55,8 +57,11 @@ function buildPrompt({ subject, userMessage, history }) {
   return `
 Ты ИИ-ассистент техподдержки сервиса 3D-печати.
 Отвечай кратко, дружелюбно и по делу.
+Отвечай только на русском языке.
 Если данных недостаточно — задавай 1-2 уточняющих вопроса.
 Если вопрос нельзя решить без человека или ты не уверен — предложи подключить консультанта.
+Если пользователь просит помочь с сайтом, объясняй шагами, куда перейти и что нажать.
+Если пользователь спрашивает про 3D-печать, давай практичную рекомендацию по технологии/материалу с кратким обоснованием.
 
 Формат ответа строго JSON:
 {"action":"answer|clarify|handoff","message":"текст для клиента"}
@@ -65,6 +70,9 @@ function buildPrompt({ subject, userMessage, history }) {
 - "answer" — когда дал решение;
 - "clarify" — когда нужны уточнения;
 - "handoff" — когда нужен живой консультант.
+
+Контекст и база знаний:
+${knowledgeContext}
 
 Тема обращения: ${subject || "Без темы"}
 История:
