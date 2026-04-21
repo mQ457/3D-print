@@ -94,6 +94,17 @@ function parseBotJson(rawText) {
   }
 }
 
+function normalizeBotText(rawText) {
+  let text = String(rawText || "").trim();
+  if (!text) return "";
+  text = text.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  if (!text) return "";
+  if (text.length > 2500) {
+    text = `${text.slice(0, 2500)}...`;
+  }
+  return text;
+}
+
 async function insertBotMessage(threadId, message) {
   await db.query(
     `INSERT INTO support_messages (id, thread_id, sender_type, sender_id, message, created_at)
@@ -247,6 +258,13 @@ async function processSupportBotReply({ threadId, userMessage }) {
     const parsed = parseBotJson(raw);
 
     if (!parsed) {
+      const fallbackMessage = normalizeBotText(raw);
+      if (fallbackMessage) {
+        // Many models sometimes ignore strict JSON format; use plain text as valid bot reply.
+        await updateThreadStatus(threadId, "bot_active");
+        await insertBotMessage(threadId, fallbackMessage);
+        return { handledByBot: true, escalated: false, reason: "fallback_plain_text" };
+      }
       await updateThreadStatus(threadId, "open");
       await insertBotMessage(threadId, "Не удалось корректно обработать запрос. Подключаю консультанта.");
       return { handledByBot: false, escalated: true, reason: "invalid_model_response" };
