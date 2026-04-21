@@ -404,7 +404,7 @@ router.post("/support/threads", requireAuth, async (req, res, next) => {
     const msgId = crypto.randomUUID();
     await db.query(
       `INSERT INTO support_threads (id, user_id, subject, status, created_at, updated_at, last_message_at)
-       VALUES ($1, $2, $3, 'bot_active', datetime('now'), datetime('now'), datetime('now'))`,
+       VALUES ($1, $2, $3, 'closed', datetime('now'), datetime('now'), datetime('now'))`,
       [threadId, req.auth.userId, String(subject).trim()]
     );
     await db.query(
@@ -471,9 +471,6 @@ router.post("/support/threads/:threadId/messages", requireAuth, async (req, res,
     const threadRow = thread.rows[0];
     if (!threadRow) {
       return res.status(404).json({ error: "NOT_FOUND", message: "Обращение не найдено." });
-    }
-    if (threadRow.status === "closed") {
-      return res.status(400).json({ error: "VALIDATION_ERROR", message: "Обращение закрыто. Создайте новое." });
     }
     await db.query(
       `INSERT INTO support_messages (id, thread_id, sender_type, sender_id, message, created_at)

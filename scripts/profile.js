@@ -12,10 +12,9 @@
   let activeThreadId = "";
   function supportStatusLabel(status) {
     const key = String(status || "").trim();
-    if (key === "bot_active") return "Обрабатывает бот";
-    if (key === "open") return "Передано консультанту";
-    if (key === "closed") return "Закрыто";
-    return key || "—";
+    if (key === "open") return "Отвечает оператор";
+    if (key === "closed" || key === "bot_active") return "Отвечает ИИ";
+    return "В обработке";
   }
 
   function senderMeta(senderType) {

@@ -39,7 +39,7 @@ Support chat can auto-reply with a local LLM and escalate to human admin only wh
 
 Escalation behavior:
 - If user asks for a human (operator/consultant), thread is moved to human queue (`status=open`).
-- If AI handles request, thread stays bot-handled (`status=bot_active`) and no admin notification is raised.
+- If AI handles request, thread stays in bot mode (`status=closed`) and no admin notification is raised.
 
 ## 2.1.1) Groq API mode (no self-hosted Ollama)
 

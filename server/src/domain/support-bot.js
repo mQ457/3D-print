@@ -261,7 +261,7 @@ async function processSupportBotReply({ threadId, userMessage }) {
       const fallbackMessage = normalizeBotText(raw);
       if (fallbackMessage) {
         // Many models sometimes ignore strict JSON format; use plain text as valid bot reply.
-        await updateThreadStatus(threadId, "bot_active");
+        await updateThreadStatus(threadId, "closed");
         await insertBotMessage(threadId, fallbackMessage);
         return { handledByBot: true, escalated: false, reason: "fallback_plain_text" };
       }
@@ -276,7 +276,7 @@ async function processSupportBotReply({ threadId, userMessage }) {
       return { handledByBot: false, escalated: true, reason: "handoff" };
     }
 
-    await updateThreadStatus(threadId, "bot_active");
+    await updateThreadStatus(threadId, "closed");
     await insertBotMessage(threadId, parsed.message);
     return { handledByBot: true, escalated: false, reason: parsed.action };
   } catch (error) {
