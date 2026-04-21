@@ -34,10 +34,42 @@ Support chat can auto-reply with a local LLM and escalate to human admin only wh
    - `SUPPORT_BOT_ENABLED=1`
    - `OLLAMA_URL=http://127.0.0.1:11434`
    - `OLLAMA_MODEL=qwen2.5:3b`
+   - optional: `OLLAMA_API_KEY=...` (if your Ollama endpoint is behind auth)
+   - optional: `OLLAMA_TIMEOUT_MS=45000`
 
 Escalation behavior:
 - If user asks for a human (operator/consultant), thread is moved to human queue (`status=open`).
 - If AI handles request, thread stays bot-handled (`status=bot_active`) and no admin notification is raised.
+
+## 2.1.1) Groq API mode (no self-hosted Ollama)
+
+Use Groq when you want AI in deploy without running your own model server.
+
+Set env:
+- `SUPPORT_BOT_ENABLED=1`
+- `AI_PROVIDER=groq`
+- `GROQ_API_KEY=...`
+- `GROQ_MODEL=llama-3.1-8b-instant`
+- optional: `GROQ_BASE_URL=https://api.groq.com/openai/v1`
+
+## 2.2) Deploy with AI enabled
+
+For production, run AI on a separate Linux server (VPS) and connect app backend to it.
+
+On VPS:
+1. Install Ollama and model:
+   - `curl -fsSL https://ollama.com/install.sh | sh`
+   - `ollama pull qwen2.5:3b`
+2. Run as a service and expose endpoint via Nginx reverse proxy (HTTPS).
+3. Protect endpoint with auth token (recommended) or IP allowlist.
+
+In Render env:
+- `SUPPORT_BOT_ENABLED=1`
+- `AI_PROVIDER=ollama`
+- `OLLAMA_URL=https://<your-ollama-domain>`
+- `OLLAMA_MODEL=qwen2.5:3b`
+- `OLLAMA_API_KEY=<token-if-enabled>`
+- `AUTO_OPEN_BROWSER=0`
 
 ## 3) Render + Neon (free and persistent)
 

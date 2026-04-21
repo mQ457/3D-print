@@ -11,6 +11,8 @@ const reviewRoutes = require("./routes/review.routes");
 
 const app = express();
 const port = Number(process.env.PORT || 3000);
+const isProduction = String(process.env.NODE_ENV || "").toLowerCase() === "production";
+const shouldAutoOpenBrowser = String(process.env.AUTO_OPEN_BROWSER || (!isProduction ? "1" : "0")) === "1";
 const webRoot = path.resolve(__dirname, "..", "..");
 const landingPagePath = path.join(webRoot, "landing.html");
 const fs = require("fs");
@@ -70,28 +72,32 @@ const server = app.listen(port, () => {
   // eslint-disable-next-line no-console
   console.log(`Site started at http://localhost:${port}`);
 
-  // автоматически открываем сайт после старта
-  const openUrl = (url) => {
-    const { exec } = require("child_process");
-    const platform = process.platform;
-    if (platform === "win32") {
-      exec(`start "" "${url}"`);
-    } else if (platform === "darwin") {
-      exec(`open "${url}"`);
-    } else {
-      exec(`xdg-open "${url}"`);
-    }
-  };
+  if (shouldAutoOpenBrowser) {
+    // автоматически открываем сайт только при локальном запуске
+    const openUrl = (url) => {
+      const { exec } = require("child_process");
+      const platform = process.platform;
+      if (platform === "win32") {
+        exec(`start "" "${url}"`);
+      } else if (platform === "darwin") {
+        exec(`open "${url}"`);
+      } else {
+        exec(`xdg-open "${url}"`);
+      }
+    };
 
-  openUrl(`http://localhost:${port}`);
+    openUrl(`http://localhost:${port}`);
+  }
 });
 
-// In some Windows/PowerShell setups the process may terminate right after start.
-// Keep an explicit referenced timer so the server stays alive.
-const keepAliveTimer = setInterval(() => {}, 60 * 60 * 1000);
-if (typeof keepAliveTimer.ref === "function") {
-  keepAliveTimer.ref();
-}
-if (typeof server.ref === "function") {
-  server.ref();
+if (!isProduction) {
+  // In some Windows/PowerShell setups the process may terminate right after start.
+  // Keep an explicit referenced timer so the server stays alive in local development.
+  const keepAliveTimer = setInterval(() => {}, 60 * 60 * 1000);
+  if (typeof keepAliveTimer.ref === "function") {
+    keepAliveTimer.ref();
+  }
+  if (typeof server.ref === "function") {
+    server.ref();
+  }
 }

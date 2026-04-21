@@ -1,8 +1,14 @@
 const crypto = require("crypto");
 const db = require("../db");
 
+const AI_PROVIDER = String(process.env.AI_PROVIDER || "ollama").trim().toLowerCase();
+const GROQ_API_KEY = String(process.env.GROQ_API_KEY || "").trim();
+const GROQ_MODEL = String(process.env.GROQ_MODEL || "llama-3.1-8b-instant").trim();
+const GROQ_BASE_URL = String(process.env.GROQ_BASE_URL || "https://api.groq.com/openai/v1").replace(/\/+$/, "");
 const OLLAMA_BASE_URL = String(process.env.OLLAMA_URL || "http://127.0.0.1:11434").replace(/\/+$/, "");
 const OLLAMA_MODEL = String(process.env.OLLAMA_MODEL || "qwen2.5:3b").trim();
+const OLLAMA_API_KEY = String(process.env.OLLAMA_API_KEY || "").trim();
+const OLLAMA_TIMEOUT_MS = Math.max(3000, Number(process.env.OLLAMA_TIMEOUT_MS || 45000) || 45000);
 const SUPPORT_BOT_ENABLED = String(process.env.SUPPORT_BOT_ENABLED || "1") !== "0";
 
 const HUMAN_PATTERNS = [
@@ -113,21 +119,75 @@ async function loadThreadContext(threadId) {
 }
 
 async function callOllama(prompt) {
-  const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: OLLAMA_MODEL,
-      prompt,
-      stream: false,
-      options: { temperature: 0.2 },
-    }),
-  });
-  if (!response.ok) {
-    throw new Error(`Ollama request failed: ${response.status}`);
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), OLLAMA_TIMEOUT_MS);
+  const headers = { "Content-Type": "application/json" };
+  if (OLLAMA_API_KEY) {
+    headers.Authorization = `Bearer ${OLLAMA_API_KEY}`;
   }
-  const payload = await response.json();
-  return String(payload?.response || "").trim();
+  try {
+    const response = await fetch(`${OLLAMA_BASE_URL}/api/generate`, {
+      method: "POST",
+      headers,
+      signal: abortController.signal,
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        prompt,
+        stream: false,
+        options: { temperature: 0.2 },
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Ollama request failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    return String(payload?.response || "").trim();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function callGroq(prompt) {
+  if (!GROQ_API_KEY) {
+    throw new Error("Groq API key is missing");
+  }
+  const abortController = new AbortController();
+  const timeoutId = setTimeout(() => abortController.abort(), OLLAMA_TIMEOUT_MS);
+  try {
+    const response = await fetch(`${GROQ_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+      },
+      signal: abortController.signal,
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        temperature: 0.2,
+        messages: [
+          {
+            role: "user",
+            content: prompt,
+          },
+        ],
+      }),
+    });
+    if (!response.ok) {
+      throw new Error(`Groq request failed: ${response.status}`);
+    }
+    const payload = await response.json();
+    const content = payload?.choices?.[0]?.message?.content;
+    return String(content || "").trim();
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+async function callModel(prompt) {
+  if (AI_PROVIDER === "groq") {
+    return callGroq(prompt);
+  }
+  return callOllama(prompt);
 }
 
 async function processSupportBotReply({ threadId, userMessage }) {
@@ -155,7 +215,7 @@ async function processSupportBotReply({ threadId, userMessage }) {
       history: context.history,
       userMessage: safeMessage,
     });
-    const raw = await callOllama(prompt);
+    const raw = await callModel(prompt);
     const parsed = parseBotJson(raw);
 
     if (!parsed) {
