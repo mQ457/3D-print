@@ -3,10 +3,8 @@
   const refreshBtn = document.getElementById("warehouse-refresh");
   const techSearchEl = document.getElementById("warehouse-tech-search");
   const materialSearchEl = document.getElementById("warehouse-material-search");
-  const variantSearchEl = document.getElementById("warehouse-variant-search");
   const techBody = document.getElementById("warehouse-tech-body");
   const materialBody = document.getElementById("warehouse-material-body");
-  const variantBody = document.getElementById("warehouse-variant-body");
   const addTechBtn = document.getElementById("warehouse-tech-add");
   const addMaterialBtn = document.getElementById("warehouse-material-add");
   const addTechCodeEl = document.getElementById("warehouse-tech-code");
@@ -42,11 +40,18 @@
       .map(
         (row) => `<tr>
           <td>${esc(row.code)}</td>
-          <td>${esc(row.name)}</td>
-          <td><input type="checkbox" data-toggle-option="${row.id}" ${row.active ? "checked" : ""}></td>
+          <td><input data-tech-name="${row.id}" value="${esc(row.name)}"></td>
+          <td><button class="btn-secondary" data-tech-save="${row.id}">Сохранить</button></td>
+          <td><button class="btn-secondary" data-tech-delete="${row.id}">Удалить</button></td>
         </tr>`
       )
       .join("");
+  }
+
+  function stockIndicatorClass(status) {
+    if (status === "critical") return "critical";
+    if (status === "low") return "low";
+    return "ok";
   }
 
   function renderMaterials() {
@@ -55,60 +60,94 @@
       !text || [row.code, row.name].join(" ").toLowerCase().includes(text)
     );
     if (!materials.length) {
-      materialBody.innerHTML = '<tr><td colspan="4">Нет данных</td></tr>';
+      materialBody.innerHTML = '<tr><td colspan="8">Нет данных</td></tr>';
       return;
     }
-    materialBody.innerHTML = materials
-      .map(
-        (row) => `<tr>
-          <td>${esc(row.code)}</td>
-          <td>${esc(row.name)}</td>
-          <td>${Number(row.priceDelta || 0)}</td>
-          <td><input type="checkbox" data-toggle-option="${row.id}" ${row.active ? "checked" : ""}></td>
-        </tr>`
-      )
-      .join("");
-  }
-
-  function renderVariants() {
-    const text = String(variantSearchEl?.value || "").trim().toLowerCase();
-    const variants = items.filter((row) => {
-      if (row.itemType !== "material_variant") return false;
-      return !text || [row.technologyCode, row.materialCode, row.colorCode, row.code].join(" ").toLowerCase().includes(text);
+    const materialStats = materials.map((material) => {
+      const variants = items.filter((item) => item.itemType === "material_variant" && item.materialCode === material.code);
+      const totalStock = variants.reduce((sum, item) => sum + Number(item.stockQty || 0), 0);
+      const totalAvailable = variants.reduce((sum, item) => sum + Number(item.availableQty || 0), 0);
+      const avgPrice = variants.length
+        ? variants.reduce((sum, item) => sum + Number(item.pricePerCm3 || 0), 0) / variants.length
+        : Number(material.priceDelta || 0);
+      const unit = variants[0]?.unit || "g";
+      const status = totalStock > 0 ? (totalAvailable / totalStock >= 0.6 ? "ok" : totalAvailable / totalStock >= 0.2 ? "low" : "critical") : "critical";
+      return { material, variants, totalStock, avgPrice, unit, status };
     });
-    if (!variants.length) {
-      variantBody.innerHTML = '<tr><td colspan="12">Нет данных</td></tr>';
-      return;
-    }
-    variantBody.innerHTML = variants
-      .map(
-        (row) => `<tr>
-          <td>${esc(row.shortId || row.id)}</td>
-          <td>${esc(row.technologyCode)}</td>
-          <td>${esc(row.materialCode)}</td>
-          <td>${esc(row.colorCode)}</td>
-          <td>${esc(row.thicknessMm)}</td>
-          <td>${esc(row.stockQty)}</td>
-          <td>${esc(row.reservedQty)}</td>
-          <td>${esc(row.consumedQty)}</td>
-          <td>${esc(row.availableQty)}</td>
-          <td>${esc(row.unit)}</td>
-          <td>${esc(row.pricePerCm3)}</td>
-          <td><span class="stock-dot stock-dot--${row.stockStatus || "ok"}"></span></td>
+    materialBody.innerHTML = materials
+      .map((row) => {
+        const stat = materialStats.find((item) => item.material.id === row.id);
+        return `<tr>
+          <td>${esc(row.code)}</td>
+          <td><input data-material-name="${row.id}" value="${esc(row.name)}"></td>
+          <td><input type="number" step="0.1" data-material-price="${row.id}" value="${Number(stat?.avgPrice || 0).toFixed(2)}"></td>
+          <td><input type="number" step="0.1" data-material-stock="${row.id}" value="${Number(stat?.totalStock || 0).toFixed(2)}"></td>
+          <td>${esc(stat?.unit || "g")}</td>
+          <td><span class="stock-dot stock-dot--${stockIndicatorClass(stat?.status)}"></span></td>
+          <td><button class="btn-secondary" data-material-save="${row.id}">Сохранить</button></td>
+          <td><button class="btn-secondary" data-material-delete="${row.id}">Удалить</button></td>
         </tr>`
-      )
+      })
       .join("");
-  }
 
-  function wireOptionToggles() {
-    document.querySelectorAll("[data-toggle-option]").forEach((node) => {
-      node.addEventListener("change", async () => {
-        const id = node.getAttribute("data-toggle-option");
+    techBody.querySelectorAll("[data-tech-save]").forEach((node) => {
+      node.addEventListener("click", async () => {
+        const id = node.getAttribute("data-tech-save");
+        const name = String(techBody.querySelector(`[data-tech-name="${id}"]`)?.value || "").trim();
+        if (!name) return;
         await API.request(`/admin/options/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ active: node.checked }),
+          body: JSON.stringify({ name }),
         });
+        await load();
+      });
+    });
+
+    techBody.querySelectorAll("[data-tech-delete]").forEach((node) => {
+      node.addEventListener("click", async () => {
+        const id = node.getAttribute("data-tech-delete");
+        await API.request(`/admin/options/${id}`, { method: "DELETE" });
+        await load();
+      });
+    });
+
+    materialBody.querySelectorAll("[data-material-save]").forEach((node) => {
+      node.addEventListener("click", async () => {
+        const id = node.getAttribute("data-material-save");
+        const material = materials.find((row) => row.id === id);
+        if (!material) return;
+        const name = String(materialBody.querySelector(`[data-material-name="${id}"]`)?.value || "").trim();
+        const nextPrice = Number(materialBody.querySelector(`[data-material-price="${id}"]`)?.value || 0);
+        const nextStock = Number(materialBody.querySelector(`[data-material-stock="${id}"]`)?.value || 0);
+        await API.request(`/admin/options/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name, priceDelta: nextPrice }),
+        });
+        const variants = items.filter((item) => item.itemType === "material_variant" && item.materialCode === material.code);
+        const currentStock = variants.reduce((sum, item) => sum + Number(item.stockQty || 0), 0);
+        const multiplier = currentStock > 0 ? nextStock / currentStock : 1;
+        await Promise.all(
+          variants.map((variant) =>
+            API.request(`/admin/warehouse/items/${variant.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                stockQty: Math.max(0, Number((Number(variant.stockQty || 0) * multiplier).toFixed(2))),
+                pricePerCm3: nextPrice,
+              }),
+            })
+          )
+        );
+        await load();
+      });
+    });
+
+    materialBody.querySelectorAll("[data-material-delete]").forEach((node) => {
+      node.addEventListener("click", async () => {
+        const id = node.getAttribute("data-material-delete");
+        await API.request(`/admin/options/${id}`, { method: "DELETE" });
         await load();
       });
     });
@@ -117,8 +156,6 @@
   function render() {
     renderTechnologies();
     renderMaterials();
-    renderVariants();
-    wireOptionToggles();
   }
 
   async function load() {
@@ -156,7 +193,7 @@
     await load();
   });
 
-  [techSearchEl, materialSearchEl, variantSearchEl].forEach((node) => node?.addEventListener("input", render));
+  [techSearchEl, materialSearchEl].forEach((node) => node?.addEventListener("input", render));
   refreshBtn?.addEventListener("click", load);
 
   async function init() {

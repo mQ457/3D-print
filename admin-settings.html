@@ -31,25 +31,7 @@
         <div class="actions" style="margin-bottom:10px;">
           <button class="btn-secondary" id="settings-refresh">Обновить</button>
         </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Услуга</th>
-                <th>База</th>
-                <th>Минимум</th>
-                <th>Ставка/час</th>
-                <th>Setup</th>
-                <th>% потерь</th>
-                <th>% поддержек</th>
-                <th>Станок/час</th>
-                <th>Объем по умолч.</th>
-                <th>Сохранить</th>
-              </tr>
-            </thead>
-            <tbody id="settings-body"></tbody>
-          </table>
-        </div>
+        <p class="muted-small" style="margin:0;">Здесь настраивается только доступность опций для пользователя.</p>
       </section>
 
       <section class="admin-card" style="margin-top:12px;">
@@ -70,18 +52,15 @@
       </section>
 
       <section class="admin-card" style="margin-top:12px;">
-        <h3 style="margin-top:0;">Материалы (цены и остатки)</h3>
+        <h3 style="margin-top:0;">Материалы (доступность в интерфейсе)</h3>
         <div class="table-wrap">
           <table>
             <thead>
               <tr>
+                <th>ID</th>
+                <th>Код</th>
                 <th>Материал</th>
-                <th>Цена за см3</th>
-                <th>Ед.</th>
-                <th>Остаток</th>
-                <th>Индикатор</th>
                 <th>Активно</th>
-                <th>Сохранить цену</th>
               </tr>
             </thead>
             <tbody id="settings-material-body"></tbody>

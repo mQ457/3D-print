@@ -38,7 +38,8 @@
               <tr>
                 <th>Код</th>
                 <th>Название</th>
-                <th>Активно</th>
+                <th>Сохранить</th>
+                <th>Удалить</th>
               </tr>
             </thead>
             <tbody id="warehouse-tech-body"></tbody>
@@ -63,8 +64,12 @@
               <tr>
                 <th>Код</th>
                 <th>Название</th>
-                <th>Цена доп.</th>
-                <th>Активно</th>
+                <th>Цена за см3</th>
+                <th>Остаток</th>
+                <th>Ед.</th>
+                <th>Индикатор</th>
+                <th>Сохранить</th>
+                <th>Удалить</th>
               </tr>
             </thead>
             <tbody id="warehouse-material-body"></tbody>
@@ -79,32 +84,6 @@
         </div>
       </section>
 
-      <section class="admin-card" style="margin-top:12px;">
-        <div class="filters">
-          <input id="warehouse-variant-search" placeholder="Поиск складской позиции (технология/материал/цвет)" />
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Технология</th>
-                <th>Материал</th>
-                <th>Цвет</th>
-                <th>Толщина</th>
-                <th>Остаток</th>
-                <th>Резерв</th>
-                <th>Потрачено</th>
-                <th>Доступно</th>
-                <th>Ед.</th>
-                <th>Цена за см3</th>
-                <th>Индикатор</th>
-              </tr>
-            </thead>
-            <tbody id="warehouse-variant-body"></tbody>
-          </table>
-        </div>
-      </section>
     </main>
   </div>
   <script src="scripts/admin-common.js"></script>
