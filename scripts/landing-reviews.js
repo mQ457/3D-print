@@ -99,7 +99,7 @@
     if (!Array.isArray(reviews) || reviews.length === 0) {
       track.innerHTML = `
         <article class="landing-review">
-          <div class="landing-review__meta"><b>3D Print</b><span></span></div>
+          <div class="landing-review__meta"><b>3Д Печать</b><span></span></div>
           <div class="landing-review__text">Пока нет отзывов. Станьте первым, кто оценит сервис.</div>
           <div class="landing-review__stars">
             <img class="landing-review__star-icon" src="${ACTIVE_STAR_SRC}" alt="star" />

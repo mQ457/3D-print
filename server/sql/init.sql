@@ -61,6 +61,40 @@ CREATE TABLE IF NOT EXISTS service_options (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS print_inventory (
+  id TEXT PRIMARY KEY,
+  item_type TEXT NOT NULL,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  technology_code TEXT,
+  material_code TEXT,
+  color_code TEXT,
+  thickness_mm NUMERIC,
+  unit TEXT NOT NULL DEFAULT 'g',
+  stock_qty NUMERIC NOT NULL DEFAULT 0,
+  reserved_qty NUMERIC NOT NULL DEFAULT 0,
+  price_per_cm3 INTEGER NOT NULL DEFAULT 0,
+  active INTEGER NOT NULL DEFAULT 1,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  meta_json TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS service_pricing_rules (
+  service_type TEXT PRIMARY KEY,
+  base_fee INTEGER NOT NULL DEFAULT 0,
+  min_price INTEGER NOT NULL DEFAULT 0,
+  hour_rate INTEGER NOT NULL DEFAULT 0,
+  setup_fee INTEGER NOT NULL DEFAULT 0,
+  waste_percent NUMERIC NOT NULL DEFAULT 0,
+  support_percent NUMERIC NOT NULL DEFAULT 0,
+  machine_hour_rate INTEGER NOT NULL DEFAULT 0,
+  default_model_volume_cm3 NUMERIC NOT NULL DEFAULT 30,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS orders (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -186,3 +220,11 @@ CREATE INDEX IF NOT EXISTS idx_user_notifications_created_at ON user_notificatio
 CREATE INDEX IF NOT EXISTS idx_reviews_created_at ON reviews(created_at);
 CREATE INDEX IF NOT EXISTS idx_reviews_user_id ON reviews(user_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_service_options_unique ON service_options(type, code);
+CREATE INDEX IF NOT EXISTS idx_print_inventory_type_active ON print_inventory(item_type, active);
+CREATE INDEX IF NOT EXISTS idx_print_inventory_tech ON print_inventory(technology_code);
+CREATE INDEX IF NOT EXISTS idx_print_inventory_material ON print_inventory(material_code);
+CREATE INDEX IF NOT EXISTS idx_print_inventory_sort ON print_inventory(sort_order);
+
+ALTER TABLE print_inventory ADD COLUMN IF NOT EXISTS consumed_qty NUMERIC NOT NULL DEFAULT 0;
+ALTER TABLE print_inventory ADD COLUMN IF NOT EXISTS low_stock_threshold NUMERIC NOT NULL DEFAULT 1000;
+ALTER TABLE print_inventory ADD COLUMN IF NOT EXISTS stop_stock_threshold NUMERIC NOT NULL DEFAULT 300;

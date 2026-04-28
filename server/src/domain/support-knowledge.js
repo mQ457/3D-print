@@ -1,6 +1,6 @@
 const SITE_MAP = `
 - landing.html: главная страница с описанием сервиса и переходом к оформлению.
-- print-step-1.html -> print-step-2.html -> print-step-3.html: пошаговый сценарий заказа 3D-печати.
+- print-step-1.html -> print-step-2.html -> print-step-3.html: пошаговый сценарий заказа 3Д-печати.
 - checkout.html: подтверждение параметров заказа перед оплатой.
 - delivery-address.html: добавление и выбор адреса доставки.
 - payment.html: добавление/выбор карты и оплата.
@@ -19,7 +19,7 @@ const SITE_GUIDE = `
 `.trim();
 
 const PRINT_BASICS = `
-Базовые знания по 3D-печати:
+Базовые знания по 3Д-печати:
 - FDM: универсально и дешевле, подходит для прототипов и функциональных деталей.
 - SLA: высокая детализация и гладкая поверхность, подходит для миниатюр/мелких точных элементов.
 - SLS: прочные нейлоновые детали сложной формы без поддержек, обычно дороже.
@@ -57,7 +57,7 @@ function buildKnowledgeContext(userMessage) {
     blocks.push(`Подсказки по навигации:\n${SITE_GUIDE}`);
   }
   if (wantsPrintHelp) {
-    blocks.push(`Знания по 3D-печати:\n${PRINT_BASICS}`);
+    blocks.push(`Знания по 3Д-печати:\n${PRINT_BASICS}`);
   }
   if (blocks.length === 0) {
     blocks.push(`Ключевая структура сайта:\n${SITE_MAP}`);

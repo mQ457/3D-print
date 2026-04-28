@@ -4,15 +4,20 @@
   const serviceByPage = {
     "print-step-1.html": { type: "scan", name: "Сканирование" },
     "print-step-2.html": { type: "modeling", name: "Моделирование" },
-    "print-step-3.html": { type: "print", name: "3D печать" },
+    "print-step-3.html": { type: "print", name: "3Д печать" },
   };
   const service = serviceByPage[page] || { type: "print", name: "Услуга" };
   const form = document.querySelector("form.config-row");
   const sumEl = document.querySelector(".sum");
+  const volumeEl = document.getElementById("model-volume-value");
+  const pricingHintEl = document.getElementById("pricing-hint");
   const checkoutLinks = document.querySelectorAll('a[href="checkout.html"]');
   let uploadedFile = null;
   let localModelFile = null;
   let previewObjectUrl = null;
+  let modelVolumeCm3 = 0;
+  let selectedPrintVariant = null;
+  let printInventory = { technologies: [], variants: [] };
 
   const MODEL_EXTS = ["stl", "obj", "amf", "3mf", "fbx"];
   const THREE_VER = "0.125.2";
@@ -43,35 +48,136 @@
   }
 
   function buildPayload() {
+    const complexity = Number(form?.elements.complexity?.value || 1);
+    const estimatedHours = Number(form?.elements.estimatedHours?.value || 1);
     return {
       serviceType: service.type,
       serviceName: service.name,
-      material: String(form?.elements.material?.value || ""),
-      technology: String(form?.elements.tech?.value || ""),
-      color: String(form?.elements.color?.value || ""),
-      thickness: String(form?.elements.thickness?.value || ""),
+      material: String(form?.elements.material?.value || selectedPrintVariant?.materialCode || ""),
+      technology: String(form?.elements.tech?.value || selectedPrintVariant?.technologyCode || ""),
+      color: String(form?.elements.color?.value || selectedPrintVariant?.colorCode || ""),
+      thickness: String(form?.elements.thickness?.value || selectedPrintVariant?.thicknessMm || ""),
       qty: Number(form?.elements.qty?.value || 1),
+      modelVolumeCm3,
+      complexity: Number.isFinite(complexity) ? complexity : 1,
+      estimatedHours: Number.isFinite(estimatedHours) ? estimatedHours : 1,
       modelingTask: String(document.getElementById("modeling-task-text")?.value || ""),
       uploadedFile,
     };
+  }
+
+  function formatNumberRu(value, digits = 2) {
+    const num = Number(value || 0);
+    return num.toLocaleString("ru-RU", { minimumFractionDigits: 0, maximumFractionDigits: digits });
+  }
+
+  function updateVolumeUi() {
+    if (volumeEl) {
+      volumeEl.textContent = modelVolumeCm3 > 0 ? `${formatNumberRu(modelVolumeCm3)} см3` : "—";
+    }
+  }
+
+  function pickPrintVariant() {
+    if (!form || service.type !== "print") return;
+    const tech = String(form.elements.tech?.value || "");
+    const material = String(form.elements.material?.value || "");
+    const color = String(form.elements.color?.value || "");
+    const thickness = Number(form.elements.thickness?.value || 0);
+    selectedPrintVariant = printInventory.variants.find(
+      (variant) =>
+        variant.technologyCode === tech &&
+        variant.materialCode === material &&
+        variant.colorCode === color &&
+        Number(variant.thicknessMm || 0) === thickness
+    ) || null;
+    if (pricingHintEl) {
+      if (!selectedPrintVariant) {
+        pricingHintEl.textContent = "Выберите доступную связку материала, цвета и толщины.";
+      } else {
+        pricingHintEl.textContent = `Остаток: ${formatNumberRu(selectedPrintVariant.availableQty, 0)} ${selectedPrintVariant.unit}. Цена материала: ${formatNumberRu(
+          selectedPrintVariant.pricePerCm3,
+          0
+        )} ₽/см3.`;
+      }
+    }
+  }
+
+  function fillSelect(select, items, mapItem) {
+    if (!select) return;
+    const html = items.map(mapItem).join("");
+    select.innerHTML = html || '<option value="">Нет доступных вариантов</option>';
+  }
+
+  function syncPrintSelectors() {
+    if (!form || service.type !== "print") return;
+    const techSelect = form.elements.tech;
+    const materialSelect = form.elements.material;
+    const colorSelect = form.elements.color;
+    const thicknessSelect = form.elements.thickness;
+    if (!techSelect || !materialSelect || !colorSelect || !thicknessSelect) return;
+
+    if (!techSelect.value && printInventory.technologies[0]) {
+      techSelect.value = printInventory.technologies[0].code;
+    }
+    const techCode = String(techSelect.value || "");
+    const techVariants = printInventory.variants.filter((variant) => variant.technologyCode === techCode && variant.availableQty > 0);
+    const materials = Array.from(new Map(techVariants.map((variant) => [variant.materialCode, variant.materialName])).entries()).map(
+      ([code, name]) => ({ code, name })
+    );
+    fillSelect(materialSelect, materials, (item) => `<option value="${item.code}">${item.name}</option>`);
+    if (materials.length && !materials.some((item) => item.code === materialSelect.value)) {
+      materialSelect.value = materials[0].code;
+    }
+
+    const materialCode = String(materialSelect.value || "");
+    const materialVariants = techVariants.filter((variant) => variant.materialCode === materialCode);
+    const colors = Array.from(new Map(materialVariants.map((variant) => [variant.colorCode, variant.colorName])).entries()).map(([code, name]) => ({
+      code,
+      name,
+    }));
+    fillSelect(colorSelect, colors, (item) => `<option value="${item.code}">${item.name}</option>`);
+    if (colors.length && !colors.some((item) => item.code === colorSelect.value)) {
+      colorSelect.value = colors[0].code;
+    }
+
+    const colorCode = String(colorSelect.value || "");
+    const colorVariants = materialVariants.filter((variant) => variant.colorCode === colorCode);
+    const thicknesses = colorVariants.map((variant) => ({
+      code: String(variant.thicknessMm),
+      name: `${String(variant.thicknessMm).replace(".", ",")} мм`,
+    }));
+    fillSelect(thicknessSelect, thicknesses, (item) => `<option value="${item.code}">${item.name}</option>`);
+    if (thicknesses.length && !thicknesses.some((item) => item.code === thicknessSelect.value)) {
+      thicknessSelect.value = thicknesses[0].code;
+    }
+    pickPrintVariant();
   }
 
   async function loadOptions() {
     if (!form) return;
     const data = await request("/orders/options");
     const options = data.options || {};
-    const fill = (name, items) => {
+    const inventory = data.printInventory || {};
+    printInventory = {
+      technologies: Array.isArray(inventory.technologies) ? inventory.technologies : [],
+      variants: Array.isArray(inventory.variants) ? inventory.variants : [],
+    };
+    const fill = (name, items, mapper) => {
       const select = form.elements[name];
       if (!select || !Array.isArray(items)) return;
       select.innerHTML = items
         .filter((item) => item.active)
-        .map((item) => `<option value="${item.code}">${item.name}</option>`)
+        .map((item) => (typeof mapper === "function" ? mapper(item) : `<option value="${item.code}">${item.name}</option>`))
         .join("");
     };
     fill("material", options.material || []);
     fill("tech", options.technology || []);
     fill("color", options.color || []);
     fill("thickness", options.thickness || []);
+    if (service.type === "print" && printInventory.technologies.length && printInventory.variants.length) {
+      fill("tech", printInventory.technologies, (item) => `<option value="${item.code}">${item.name}</option>`);
+      syncPrintSelectors();
+    }
   }
 
   async function updatePrice() {
@@ -83,7 +189,54 @@
         body: JSON.stringify(buildPayload()),
       });
       sumEl.textContent = `${data.totalAmount || 0} ₽`;
+      if (service.type === "print") {
+        pickPrintVariant();
+      }
     } catch (_error) {}
+  }
+
+  function meshVolumeCm3(THREE, mesh) {
+    const geometry = mesh.geometry;
+    if (!geometry || !geometry.attributes?.position) return 0;
+    const cloned = geometry.clone();
+    cloned.applyMatrix4(mesh.matrixWorld);
+    const pos = cloned.attributes.position;
+    const index = cloned.index;
+    const a = new THREE.Vector3();
+    const b = new THREE.Vector3();
+    const c = new THREE.Vector3();
+    let volumeMm3 = 0;
+    const triCount = index ? index.count / 3 : pos.count / 3;
+    for (let i = 0; i < triCount; i += 1) {
+      if (index) {
+        a.fromBufferAttribute(pos, index.getX(i * 3));
+        b.fromBufferAttribute(pos, index.getX(i * 3 + 1));
+        c.fromBufferAttribute(pos, index.getX(i * 3 + 2));
+      } else {
+        a.fromBufferAttribute(pos, i * 3);
+        b.fromBufferAttribute(pos, i * 3 + 1);
+        c.fromBufferAttribute(pos, i * 3 + 2);
+      }
+      volumeMm3 += a.dot(b.clone().cross(c)) / 6;
+    }
+    cloned.dispose?.();
+    return Math.abs(volumeMm3) / 1000;
+  }
+
+  function estimateObjectVolumeCm3(THREE, object3d) {
+    let sum = 0;
+    object3d.updateMatrixWorld(true);
+    object3d.traverse((child) => {
+      if (child.isMesh && child.geometry) {
+        sum += meshVolumeCm3(THREE, child);
+      }
+    });
+    if (sum > 0) return sum;
+    const box = new THREE.Box3().setFromObject(object3d);
+    if (box.isEmpty()) return 0;
+    const size = new THREE.Vector3();
+    box.getSize(size);
+    return Math.abs((size.x * size.y * size.z) / 1000);
   }
 
   let threeScriptsPromise = null;
@@ -414,6 +567,9 @@
               roughness: 0.42,
             });
             const mesh = new THREE.Mesh(geometry, material);
+            modelVolumeCm3 = estimateObjectVolumeCm3(THREE, mesh);
+            updateVolumeUi();
+            updatePrice();
             geometry.computeBoundingBox();
             const bbox = geometry.boundingBox;
             const size = new THREE.Vector3();
@@ -431,6 +587,9 @@
           loadUrl,
           (object) => {
             if (generation !== viewerGeneration) return;
+            modelVolumeCm3 = estimateObjectVolumeCm3(THREE, object);
+            updateVolumeUi();
+            updatePrice();
             normalizeObject(object);
             scene.add(object);
           },
@@ -443,6 +602,9 @@
           loadUrl,
           (object) => {
             if (generation !== viewerGeneration) return;
+            modelVolumeCm3 = estimateObjectVolumeCm3(THREE, object);
+            updateVolumeUi();
+            updatePrice();
             normalizeObject(object);
             scene.add(object);
           },
@@ -459,6 +621,9 @@
               onLoadError(new Error("Пустой или неподдерживаемый AMF."));
               return;
             }
+            modelVolumeCm3 = estimateObjectVolumeCm3(THREE, object);
+            updateVolumeUi();
+            updatePrice();
             normalizeObject(object);
             scene.add(object);
           },
@@ -471,6 +636,9 @@
           loadUrl,
           (object) => {
             if (generation !== viewerGeneration) return;
+            modelVolumeCm3 = estimateObjectVolumeCm3(THREE, object);
+            updateVolumeUi();
+            updatePrice();
             normalizeObject(object);
             scene.add(object);
           },
@@ -478,6 +646,8 @@
           onLoadError
         );
       } else {
+        modelVolumeCm3 = 0;
+        updateVolumeUi();
         fallbackMesh();
       }
     } catch (_error) {
@@ -553,10 +723,35 @@
   async function init() {
     try {
       await loadOptions();
+      updateVolumeUi();
       attachModelingNotepad();
       await attachModelUpload();
       initCheckoutLinks();
       await updatePrice();
+      form?.elements?.tech?.addEventListener("change", () => {
+        if (service.type === "print") {
+          syncPrintSelectors();
+          updatePrice();
+        }
+      });
+      form?.elements?.material?.addEventListener("change", () => {
+        if (service.type === "print") {
+          syncPrintSelectors();
+          updatePrice();
+        }
+      });
+      form?.elements?.color?.addEventListener("change", () => {
+        if (service.type === "print") {
+          syncPrintSelectors();
+          updatePrice();
+        }
+      });
+      form?.elements?.thickness?.addEventListener("change", () => {
+        if (service.type === "print") {
+          pickPrintVariant();
+          updatePrice();
+        }
+      });
       form?.addEventListener("change", updatePrice);
       form?.addEventListener("input", updatePrice);
     } catch (_error) {}

@@ -70,21 +70,126 @@ async function loadPriceMap() {
   return map;
 }
 
-async function calculateOrderPrice({ serviceType, material, technology, color, thickness, qty }) {
-  const priceMap = await loadPriceMap();
-  const baseByType = {
-    scan: 3000,
-    modeling: 4500,
-    print: 2500,
+async function loadPricingRule(serviceType) {
+  const result = await db.query(
+    `SELECT service_type, base_fee, min_price, hour_rate, setup_fee, waste_percent, support_percent,
+            machine_hour_rate, default_model_volume_cm3
+     FROM service_pricing_rules
+     WHERE service_type = $1
+     LIMIT 1`,
+    [serviceType]
+  );
+  const row = result.rows[0];
+  return {
+    serviceType,
+    baseFee: Number(row?.base_fee || 0),
+    minPrice: Number(row?.min_price || 500),
+    hourRate: Number(row?.hour_rate || 0),
+    setupFee: Number(row?.setup_fee || 0),
+    wastePercent: Number(row?.waste_percent || 0),
+    supportPercent: Number(row?.support_percent || 0),
+    machineHourRate: Number(row?.machine_hour_rate || 0),
+    defaultModelVolumeCm3: Number(row?.default_model_volume_cm3 || 20),
   };
-  const base = baseByType[serviceType] || 2500;
+}
+
+async function loadPrintInventoryRows() {
+  const result = await db.query(
+    `SELECT id, item_type, code, name, technology_code, material_code, color_code, thickness_mm,
+            unit, stock_qty, reserved_qty, consumed_qty, price_per_cm3, low_stock_threshold, stop_stock_threshold,
+            active, sort_order, meta_json
+     FROM print_inventory
+     WHERE active = 1
+     ORDER BY item_type ASC, sort_order ASC, name ASC`
+  );
+  return result.rows.map((row) => {
+    let meta = null;
+    try {
+      meta = row.meta_json ? JSON.parse(row.meta_json) : null;
+    } catch {
+      meta = null;
+    }
+    return {
+      id: row.id,
+      itemType: row.item_type,
+      code: row.code,
+      name: row.name,
+      technologyCode: String(row.technology_code || ""),
+      materialCode: String(row.material_code || ""),
+      colorCode: String(row.color_code || ""),
+      thicknessMm: row.thickness_mm != null ? Number(row.thickness_mm) : null,
+      unit: row.unit || "g",
+      stockQty: Number(row.stock_qty || 0),
+      reservedQty: Number(row.reserved_qty || 0),
+      consumedQty: Number(row.consumed_qty || 0),
+      pricePerCm3: Number(row.price_per_cm3 || 0),
+      lowStockThreshold: Number(row.low_stock_threshold || 0),
+      stopStockThreshold: Number(row.stop_stock_threshold || 0),
+      sortOrder: Number(row.sort_order || 0),
+      meta,
+    };
+  });
+}
+
+function findInventoryVariant(inventoryRows, { technology, material, color, thickness }) {
+  const normalizedThickness = thickness != null && thickness !== "" ? Number(thickness) : null;
+  return inventoryRows.find(
+    (row) =>
+      row.itemType === "material_variant" &&
+      row.technologyCode === String(technology || "") &&
+      row.materialCode === String(material || "") &&
+      row.colorCode === String(color || "") &&
+      Number(row.thicknessMm || 0) === Number(normalizedThickness || 0)
+  );
+}
+
+function buildReserveEstimate({ variant, volumeCm3, qty, rule }) {
   const quantity = Math.max(1, Number(qty || 1));
+  const density = Math.max(0.1, Number(variant?.meta?.densityGcm3 || 1));
+  const wasteK = 1 + Math.max(0, Number(rule?.wastePercent || 0)) / 100;
+  const supportK = 1 + Math.max(0, Number(rule?.supportPercent || 0)) / 100;
+  const cm3Total = Math.max(0, Number(volumeCm3 || 0)) * quantity * wasteK * supportK;
+  if ((variant?.unit || "").toLowerCase() === "ml") {
+    return Math.ceil(cm3Total);
+  }
+  return Math.ceil(cm3Total * density);
+}
+
+async function calculateOrderPrice({ serviceType, material, technology, color, thickness, qty, modelVolumeCm3, complexity, estimatedHours }) {
+  const quantity = Math.max(1, Number(qty || 1));
+  const rule = await loadPricingRule(serviceType);
+  if (serviceType === "print") {
+    const inventoryRows = await loadPrintInventoryRows();
+    const variant = findInventoryVariant(inventoryRows, { technology, material, color, thickness });
+    if (!variant) {
+      return Math.max(rule.minPrice, 700);
+    }
+    const availableQty = Math.max(0, Number(variant.stockQty || 0) - Number(variant.reservedQty || 0));
+    if (availableQty <= 0) {
+      return Math.max(rule.minPrice, 700);
+    }
+    const rawVolume = Number(modelVolumeCm3 || 0);
+    const volumeCm3 = rawVolume > 0 ? rawVolume : Math.max(1, Number(rule.defaultModelVolumeCm3 || 20));
+    const speedCm3h = Math.max(6, Number(variant.meta?.defaultSpeedCm3h || 20));
+    const machineHours = volumeCm3 / speedCm3h;
+    const materialCost = volumeCm3 * Math.max(0, Number(variant.pricePerCm3 || 0));
+    const machineCost = machineHours * Math.max(0, Number(rule.machineHourRate || 0));
+    const base = Math.max(0, Number(rule.baseFee || 0)) + Math.max(0, Number(rule.setupFee || 0));
+    const subtotal = (materialCost + machineCost + base) * quantity;
+    const wasteK = 1 + Math.max(0, Number(rule.wastePercent || 0)) / 100;
+    const supportK = 1 + Math.max(0, Number(rule.supportPercent || 0)) / 100;
+    return Math.max(rule.minPrice, Math.round(subtotal * wasteK * supportK));
+  }
+
+  const hours = Math.max(0.5, Number(estimatedHours || 1));
+  const complexityK = Math.max(1, Number(complexity || 1));
+  const priceMap = await loadPriceMap();
   const extras =
     (priceMap.get(`material:${material}`) || 0) +
     (priceMap.get(`technology:${technology}`) || 0) +
-    (priceMap.get(`color:${color}`) || 0) +
-    (priceMap.get(`thickness:${thickness}`) || 0);
-  return Math.max(500, Math.round((base + extras) * quantity));
+    (priceMap.get(`color:${color}`) || 0);
+  const subtotal = Number(rule.baseFee || 0) + Number(rule.hourRate || 0) * hours * complexityK + extras;
+  return Math.max(rule.minPrice || 500, Math.round(subtotal));
 }
 
 router.get("/options", async (_req, res, next) => {
@@ -107,7 +212,45 @@ router.get("/options", async (_req, res, next) => {
       if (!grouped[row.type]) grouped[row.type] = [];
       grouped[row.type].push(item);
     });
-    res.json({ ok: true, options: grouped });
+    const inventoryRows = await loadPrintInventoryRows();
+    const sellableVariants = inventoryRows.filter((row) => {
+      if (row.itemType !== "material_variant") return false;
+      const availableQty = Math.max(0, Number(row.stockQty || 0) - Number(row.reservedQty || 0));
+      const stopThreshold = Math.max(0, Number(row.stopStockThreshold || 0));
+      return availableQty > stopThreshold;
+    });
+
+    const technologyCodes = new Set(sellableVariants.map((row) => row.technologyCode));
+    const technologies = inventoryRows
+      .filter((row) => row.itemType === "technology")
+      .filter((row) => technologyCodes.has(row.technologyCode || row.code))
+      .map((row) => ({
+        id: row.id,
+        code: row.technologyCode || row.code,
+        name: row.name,
+        active: true,
+      }));
+    const variants = sellableVariants
+      .map((row) => ({
+        id: row.id,
+        code: row.code,
+        technologyCode: row.technologyCode,
+        materialCode: row.materialCode,
+        materialName: String(row.meta?.materialName || row.materialCode || "").toUpperCase(),
+        colorCode: row.colorCode,
+        colorName: String(row.meta?.colorName || row.colorCode || "").toUpperCase(),
+        thicknessMm: Number(row.thicknessMm || 0),
+        unit: row.unit || "g",
+        stockQty: Number(row.stockQty || 0),
+        reservedQty: Number(row.reservedQty || 0),
+        availableQty: Math.max(0, Number(row.stockQty || 0) - Number(row.reservedQty || 0)),
+        pricePerCm3: Number(row.pricePerCm3 || 0),
+        lowStockThreshold: Number(row.lowStockThreshold || 0),
+        stopStockThreshold: Number(row.stopStockThreshold || 0),
+        name: row.name,
+      }));
+
+    res.json({ ok: true, options: grouped, printInventory: { technologies, variants } });
   } catch (error) {
     next(error);
   }
@@ -213,6 +356,9 @@ router.post("/", requireAuth, async (req, res, next) => {
       addressId,
       paymentMethodId,
       totalAmount,
+      modelVolumeCm3,
+      complexity,
+      estimatedHours,
     } = req.body || {};
 
     const normalizedServiceType = normalizeServiceType(serviceType);
@@ -224,6 +370,7 @@ router.post("/", requireAuth, async (req, res, next) => {
     }
 
     let finalAmount = Number(totalAmount);
+    let inventoryReservation = null;
     if (!Number.isFinite(finalAmount) || finalAmount <= 0) {
       finalAmount = await calculateOrderPrice({
         serviceType: normalizedServiceType,
@@ -232,7 +379,48 @@ router.post("/", requireAuth, async (req, res, next) => {
         color,
         thickness,
         qty,
+        modelVolumeCm3,
+        complexity,
+        estimatedHours,
       });
+    }
+    if (normalizedServiceType === "print") {
+      const inventoryRows = await loadPrintInventoryRows();
+      const variant = findInventoryVariant(inventoryRows, { technology, material, color, thickness });
+      if (!variant) {
+        return res.status(400).json({
+          error: "VALIDATION_ERROR",
+          message: "Выбранная комбинация материала недоступна на складе.",
+        });
+      }
+      const rule = await loadPricingRule("print");
+      const estimatedReserveQty = buildReserveEstimate({
+        variant,
+        volumeCm3: Number(modelVolumeCm3 || 0) || Number(rule.defaultModelVolumeCm3 || 20),
+        qty,
+        rule,
+      });
+      const availableQty = Math.max(0, Number(variant.stockQty || 0) - Number(variant.reservedQty || 0));
+      if (estimatedReserveQty > availableQty) {
+        return res.status(400).json({
+          error: "OUT_OF_STOCK",
+          message: `Недостаточно материала на складе. Доступно: ${availableQty} ${variant.unit}.`,
+        });
+      }
+      await db.query(
+        `UPDATE print_inventory
+         SET reserved_qty = reserved_qty + $1,
+             updated_at = datetime('now')
+         WHERE id = $2`,
+        [estimatedReserveQty, variant.id]
+      );
+      inventoryReservation = {
+        inventoryId: variant.id,
+        variantCode: variant.code,
+        reservedQty: estimatedReserveQty,
+        unit: variant.unit,
+        state: "reserved",
+      };
     }
 
     let savedAddressId = null;
@@ -273,6 +461,10 @@ router.post("/", requireAuth, async (req, res, next) => {
       technology: String(technology || ""),
       color: String(color || ""),
       thickness: String(thickness || ""),
+      modelVolumeCm3: Number(modelVolumeCm3 || 0),
+      complexity: Number(complexity || 1),
+      estimatedHours: Number(estimatedHours || 0),
+      inventoryReservation,
     });
     await db.query(
       `INSERT INTO orders (

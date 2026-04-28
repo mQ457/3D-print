@@ -181,7 +181,7 @@ router.patch("/orders/:id", async (req, res, next) => {
     if (!normalizedStatus) {
       return res.status(400).json({ error: "VALIDATION_ERROR", message: "Укажите статус." });
     }
-    const orderRes = await db.query("SELECT id, service_type FROM orders WHERE id = $1 LIMIT 1", [req.params.id]);
+    const orderRes = await db.query("SELECT id, service_type, status, details_json FROM orders WHERE id = $1 LIMIT 1", [req.params.id]);
     const order = orderRes.rows[0];
     if (!order) {
       return res.status(404).json({ error: "NOT_FOUND", message: "Заказ не найден." });
@@ -194,12 +194,53 @@ router.patch("/orders/:id", async (req, res, next) => {
         allowedStatuses: getAllowedStatuses(serviceType),
       });
     }
+    let details = {};
+    try {
+      details = order.details_json ? JSON.parse(order.details_json) : {};
+    } catch {
+      details = {};
+    }
+    const reservation = details.inventoryReservation || null;
+    const fromStatus = String(order.status || "");
+    const toStatus = normalizedStatus;
+    const finishStatuses = new Set(["Завершен", "Готов к выдаче", "Отправлен", "Модель готова"]);
+    const cancelStatuses = new Set(["Отменен", "Отмена"]);
+    if (reservation?.inventoryId && reservation?.reservedQty) {
+      const reservedQty = Math.max(0, Number(reservation.reservedQty || 0));
+      const state = String(reservation.state || "reserved");
+      const goesFinish = finishStatuses.has(toStatus);
+      const goesCancel = cancelStatuses.has(toStatus);
+      const wasFinish = finishStatuses.has(fromStatus);
+      const wasCancel = cancelStatuses.has(fromStatus);
+      if (state === "reserved" && goesFinish && !wasFinish) {
+        await db.query(
+          `UPDATE print_inventory
+           SET reserved_qty = GREATEST(0, reserved_qty - $1),
+               consumed_qty = consumed_qty + $1,
+               stock_qty = GREATEST(0, stock_qty - $1),
+               updated_at = datetime('now')
+           WHERE id = $2`,
+          [reservedQty, reservation.inventoryId]
+        );
+        details.inventoryReservation = { ...reservation, state: "consumed", consumedAtStatus: toStatus };
+      } else if (state === "reserved" && goesCancel && !wasCancel) {
+        await db.query(
+          `UPDATE print_inventory
+           SET reserved_qty = GREATEST(0, reserved_qty - $1),
+               updated_at = datetime('now')
+           WHERE id = $2`,
+          [reservedQty, reservation.inventoryId]
+        );
+        details.inventoryReservation = { ...reservation, state: "released", releasedAtStatus: toStatus };
+      }
+    }
     await db.query(
       `UPDATE orders
        SET status = $1,
+           details_json = $2,
            updated_at = datetime('now')
-       WHERE id = $2`,
-      [normalizedStatus, req.params.id]
+       WHERE id = $3`,
+      [normalizedStatus, JSON.stringify(details), req.params.id]
     );
     res.json({ ok: true });
   } catch (error) {
@@ -835,6 +876,256 @@ router.patch("/options/:id", async (req, res, next) => {
 router.delete("/options/:id", async (req, res, next) => {
   try {
     await db.query("DELETE FROM service_options WHERE id = $1", [req.params.id]);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+function parseMetaJsonSafe(value) {
+  if (value == null) return null;
+  if (typeof value === "object") return value;
+  if (!String(value).trim()) return null;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return null;
+  }
+}
+
+router.get("/warehouse/items", async (_req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT id, item_type, code, name, technology_code, material_code, color_code, thickness_mm,
+              unit, stock_qty, reserved_qty, consumed_qty, price_per_cm3, low_stock_threshold, stop_stock_threshold,
+              active, sort_order, meta_json, created_at, updated_at
+       FROM print_inventory
+       ORDER BY item_type ASC, sort_order ASC, name ASC`
+    );
+    res.json({
+      ok: true,
+      items: result.rows.map((row) => ({
+        id: row.id,
+        itemType: row.item_type,
+        code: row.code,
+        name: row.name,
+        technologyCode: row.technology_code || "",
+        materialCode: row.material_code || "",
+        colorCode: row.color_code || "",
+        thicknessMm: row.thickness_mm != null ? Number(row.thickness_mm) : null,
+        unit: row.unit || "g",
+        stockQty: Number(row.stock_qty || 0),
+        reservedQty: Number(row.reserved_qty || 0),
+        consumedQty: Number(row.consumed_qty || 0),
+        availableQty: Math.max(0, Number(row.stock_qty || 0) - Number(row.reserved_qty || 0)),
+        pricePerCm3: Number(row.price_per_cm3 || 0),
+        lowStockThreshold: Number(row.low_stock_threshold || 0),
+        stopStockThreshold: Number(row.stop_stock_threshold || 0),
+        stockStatus:
+          Math.max(0, Number(row.stock_qty || 0) - Number(row.reserved_qty || 0)) <= Number(row.stop_stock_threshold || 0)
+            ? "critical"
+            : Math.max(0, Number(row.stock_qty || 0) - Number(row.reserved_qty || 0)) <= Number(row.low_stock_threshold || 0)
+            ? "low"
+            : "ok",
+        active: Boolean(row.active),
+        sortOrder: Number(row.sort_order || 0),
+        meta: parseMetaJsonSafe(row.meta_json),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post("/warehouse/items", async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const itemType = String(body.itemType || "").trim();
+    const code = String(body.code || "").trim().toLowerCase();
+    const name = String(body.name || "").trim();
+    if (!itemType || !code || !name) {
+      return res.status(400).json({ error: "VALIDATION_ERROR", message: "itemType, code и name обязательны." });
+    }
+    if (!["technology", "material_variant"].includes(itemType)) {
+      return res.status(400).json({ error: "VALIDATION_ERROR", message: "itemType должен быть technology или material_variant." });
+    }
+    const technologyCode = String(body.technologyCode || "").trim().toLowerCase();
+    const materialCode = String(body.materialCode || "").trim().toLowerCase();
+    const colorCode = String(body.colorCode || "").trim().toLowerCase();
+    const thicknessMm = body.thicknessMm != null && body.thicknessMm !== "" ? Number(body.thicknessMm) : null;
+    if (itemType === "material_variant" && (!technologyCode || !materialCode || !colorCode || !Number.isFinite(thicknessMm))) {
+      return res.status(400).json({
+        error: "VALIDATION_ERROR",
+        message: "Для material_variant нужны technologyCode, materialCode, colorCode и thicknessMm.",
+      });
+    }
+    const stockQty = itemType === "material_variant" ? Number(body.stockQty || 0) : 0;
+    const unit = itemType === "material_variant" ? String(body.unit || "g").trim() : "service";
+    const pricePerCm3 = itemType === "material_variant" ? Number(body.pricePerCm3 || 0) : 0;
+    const meta = body.meta != null ? body.meta : null;
+    const id = crypto.randomUUID();
+    await db.query(
+      `INSERT INTO print_inventory (
+         id, item_type, code, name, technology_code, material_code, color_code, thickness_mm,
+         unit, stock_qty, reserved_qty, consumed_qty, price_per_cm3, low_stock_threshold, stop_stock_threshold,
+         active, sort_order, meta_json, created_at, updated_at
+       )
+       VALUES (
+         $1, $2, $3, $4, $5, $6, $7, $8,
+         $9, $10, 0, 0, $11, $12, $13, $14, $15, $16, datetime('now'), datetime('now')
+       )`,
+      [
+        id,
+        itemType,
+        code,
+        name,
+        technologyCode || null,
+        materialCode || null,
+        colorCode || null,
+        Number.isFinite(thicknessMm) ? thicknessMm : null,
+        unit || "g",
+        Number.isFinite(stockQty) ? stockQty : 0,
+        Number.isFinite(pricePerCm3) ? pricePerCm3 : 0,
+        Number(body.lowStockThreshold || 1000),
+        Number(body.stopStockThreshold || 300),
+        body.active === false ? 0 : 1,
+        Number(body.sortOrder || 0),
+        meta != null ? JSON.stringify(meta) : null,
+      ]
+    );
+    res.status(201).json({ ok: true, id });
+  } catch (error) {
+    if (String(error.message || "").includes("print_inventory_code_key")) {
+      return res.status(409).json({ error: "ALREADY_EXISTS", message: "Код уже используется." });
+    }
+    next(error);
+  }
+});
+
+router.patch("/warehouse/items/:id", async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const meta = body.meta != null ? JSON.stringify(body.meta) : null;
+    await db.query(
+      `UPDATE print_inventory
+       SET name = COALESCE($1, name),
+           technology_code = COALESCE($2, technology_code),
+           material_code = COALESCE($3, material_code),
+           color_code = COALESCE($4, color_code),
+           thickness_mm = COALESCE($5, thickness_mm),
+           unit = COALESCE($6, unit),
+           stock_qty = COALESCE($7, stock_qty),
+           reserved_qty = COALESCE($8, reserved_qty),
+           consumed_qty = COALESCE($9, consumed_qty),
+           price_per_cm3 = COALESCE($10, price_per_cm3),
+           low_stock_threshold = COALESCE($11, low_stock_threshold),
+           stop_stock_threshold = COALESCE($12, stop_stock_threshold),
+           active = COALESCE($13, active),
+           sort_order = COALESCE($14, sort_order),
+           meta_json = COALESCE($15, meta_json),
+           updated_at = datetime('now')
+       WHERE id = $16`,
+      [
+        body.name != null ? String(body.name) : null,
+        body.technologyCode != null ? String(body.technologyCode || "").toLowerCase() : null,
+        body.materialCode != null ? String(body.materialCode || "").toLowerCase() : null,
+        body.colorCode != null ? String(body.colorCode || "").toLowerCase() : null,
+        body.thicknessMm != null && body.thicknessMm !== "" ? Number(body.thicknessMm) : null,
+        body.unit != null ? String(body.unit || "g") : null,
+        body.stockQty != null ? Number(body.stockQty) : null,
+        body.reservedQty != null ? Number(body.reservedQty) : null,
+        body.consumedQty != null ? Number(body.consumedQty) : null,
+        body.pricePerCm3 != null ? Number(body.pricePerCm3) : null,
+        body.lowStockThreshold != null ? Number(body.lowStockThreshold) : null,
+        body.stopStockThreshold != null ? Number(body.stopStockThreshold) : null,
+        body.active != null ? (body.active ? 1 : 0) : null,
+        body.sortOrder != null ? Number(body.sortOrder) : null,
+        meta,
+        req.params.id,
+      ]
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete("/warehouse/items/:id", async (req, res, next) => {
+  try {
+    await db.query("DELETE FROM print_inventory WHERE id = $1", [req.params.id]);
+    res.json({ ok: true });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/pricing-rules", async (_req, res, next) => {
+  try {
+    const result = await db.query(
+      `SELECT service_type, base_fee, min_price, hour_rate, setup_fee, waste_percent, support_percent,
+              machine_hour_rate, default_model_volume_cm3, created_at, updated_at
+       FROM service_pricing_rules
+       ORDER BY service_type ASC`
+    );
+    res.json({
+      ok: true,
+      rules: result.rows.map((row) => ({
+        serviceType: row.service_type,
+        baseFee: Number(row.base_fee || 0),
+        minPrice: Number(row.min_price || 0),
+        hourRate: Number(row.hour_rate || 0),
+        setupFee: Number(row.setup_fee || 0),
+        wastePercent: Number(row.waste_percent || 0),
+        supportPercent: Number(row.support_percent || 0),
+        machineHourRate: Number(row.machine_hour_rate || 0),
+        defaultModelVolumeCm3: Number(row.default_model_volume_cm3 || 0),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      })),
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.patch("/pricing-rules/:serviceType", async (req, res, next) => {
+  try {
+    const body = req.body || {};
+    const serviceType = String(req.params.serviceType || "").trim();
+    if (!serviceType) {
+      return res.status(400).json({ error: "VALIDATION_ERROR", message: "Не указан serviceType." });
+    }
+    await db.query(
+      `INSERT INTO service_pricing_rules (
+         service_type, base_fee, min_price, hour_rate, setup_fee, waste_percent, support_percent,
+         machine_hour_rate, default_model_volume_cm3, created_at, updated_at
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, datetime('now'), datetime('now'))
+       ON CONFLICT (service_type)
+       DO UPDATE SET
+         base_fee = COALESCE(EXCLUDED.base_fee, service_pricing_rules.base_fee),
+         min_price = COALESCE(EXCLUDED.min_price, service_pricing_rules.min_price),
+         hour_rate = COALESCE(EXCLUDED.hour_rate, service_pricing_rules.hour_rate),
+         setup_fee = COALESCE(EXCLUDED.setup_fee, service_pricing_rules.setup_fee),
+         waste_percent = COALESCE(EXCLUDED.waste_percent, service_pricing_rules.waste_percent),
+         support_percent = COALESCE(EXCLUDED.support_percent, service_pricing_rules.support_percent),
+         machine_hour_rate = COALESCE(EXCLUDED.machine_hour_rate, service_pricing_rules.machine_hour_rate),
+         default_model_volume_cm3 = COALESCE(EXCLUDED.default_model_volume_cm3, service_pricing_rules.default_model_volume_cm3),
+         updated_at = datetime('now')`,
+      [
+        serviceType,
+        body.baseFee != null ? Number(body.baseFee) : 0,
+        body.minPrice != null ? Number(body.minPrice) : 0,
+        body.hourRate != null ? Number(body.hourRate) : 0,
+        body.setupFee != null ? Number(body.setupFee) : 0,
+        body.wastePercent != null ? Number(body.wastePercent) : 0,
+        body.supportPercent != null ? Number(body.supportPercent) : 0,
+        body.machineHourRate != null ? Number(body.machineHourRate) : 0,
+        body.defaultModelVolumeCm3 != null ? Number(body.defaultModelVolumeCm3) : 0,
+      ]
+    );
     res.json({ ok: true });
   } catch (error) {
     next(error);

@@ -2,60 +2,56 @@
   const API = window.AdminCommon;
   const tbody = document.getElementById("settings-body");
   const refreshBtn = document.getElementById("settings-refresh");
-  let options = [];
+  let rules = [];
 
   function render() {
-    if (!options.length) {
-      tbody.innerHTML = '<tr><td colspan="8">Нет данных</td></tr>';
+    if (!rules.length) {
+      tbody.innerHTML = '<tr><td colspan="10">Нет данных</td></tr>';
       return;
     }
-    tbody.innerHTML = options
+    tbody.innerHTML = rules
       .map(
-        (option) => `
+        (rule) => `
       <tr>
-        <td>${option.type}</td>
-        <td>${option.code}</td>
-        <td><input data-name="${option.id}" value="${option.name}" /></td>
-        <td><input data-price="${option.id}" type="number" value="${option.priceDelta || 0}" /></td>
-        <td><input data-meta="${option.id}" value='${option.meta ? JSON.stringify(option.meta).replace(/'/g, "&#39;") : ""}' /></td>
-        <td><input data-active="${option.id}" type="checkbox" ${option.active ? "checked" : ""} /></td>
-        <td><input data-sort="${option.id}" type="number" value="${option.sortOrder || 0}" /></td>
-        <td><button class="btn-secondary" data-save="${option.id}">Сохранить</button></td>
+        <td>${rule.serviceType}</td>
+        <td><input data-base="${rule.serviceType}" type="number" value="${rule.baseFee || 0}" /></td>
+        <td><input data-min="${rule.serviceType}" type="number" value="${rule.minPrice || 0}" /></td>
+        <td><input data-hour="${rule.serviceType}" type="number" value="${rule.hourRate || 0}" /></td>
+        <td><input data-setup="${rule.serviceType}" type="number" value="${rule.setupFee || 0}" /></td>
+        <td><input data-waste="${rule.serviceType}" type="number" step="0.1" value="${rule.wastePercent || 0}" /></td>
+        <td><input data-support="${rule.serviceType}" type="number" step="0.1" value="${rule.supportPercent || 0}" /></td>
+        <td><input data-machine="${rule.serviceType}" type="number" value="${rule.machineHourRate || 0}" /></td>
+        <td><input data-volume="${rule.serviceType}" type="number" step="0.1" value="${rule.defaultModelVolumeCm3 || 0}" /></td>
+        <td><button class="btn-secondary" data-save="${rule.serviceType}">Сохранить</button></td>
       </tr>`
       )
       .join("");
 
     tbody.querySelectorAll("[data-save]").forEach((button) => {
       button.addEventListener("click", async () => {
-        const id = button.getAttribute("data-save");
-        let meta = null;
-        const rawMeta = tbody.querySelector(`[data-meta="${id}"]`)?.value || "";
-        if (rawMeta.trim()) {
-          try {
-            meta = JSON.parse(rawMeta);
-          } catch {
-            alert("Некорректный JSON в meta.");
-            return;
-          }
-        }
-        await API.request(`/admin/options/${id}`, {
+        const serviceType = button.getAttribute("data-save");
+        await API.request(`/admin/pricing-rules/${serviceType}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: tbody.querySelector(`[data-name="${id}"]`)?.value || "",
-            priceDelta: Number(tbody.querySelector(`[data-price="${id}"]`)?.value || 0),
-            active: tbody.querySelector(`[data-active="${id}"]`)?.checked,
-            sortOrder: Number(tbody.querySelector(`[data-sort="${id}"]`)?.value || 0),
-            meta,
+            baseFee: Number(tbody.querySelector(`[data-base="${serviceType}"]`)?.value || 0),
+            minPrice: Number(tbody.querySelector(`[data-min="${serviceType}"]`)?.value || 0),
+            hourRate: Number(tbody.querySelector(`[data-hour="${serviceType}"]`)?.value || 0),
+            setupFee: Number(tbody.querySelector(`[data-setup="${serviceType}"]`)?.value || 0),
+            wastePercent: Number(tbody.querySelector(`[data-waste="${serviceType}"]`)?.value || 0),
+            supportPercent: Number(tbody.querySelector(`[data-support="${serviceType}"]`)?.value || 0),
+            machineHourRate: Number(tbody.querySelector(`[data-machine="${serviceType}"]`)?.value || 0),
+            defaultModelVolumeCm3: Number(tbody.querySelector(`[data-volume="${serviceType}"]`)?.value || 0),
           }),
         });
+        await load();
       });
     });
   }
 
   async function load() {
-    const data = await API.request("/admin/options");
-    options = data.options || [];
+    const data = await API.request("/admin/pricing-rules");
+    rules = data.rules || [];
     render();
   }
 

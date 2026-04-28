@@ -9,7 +9,7 @@
 <body>
   <div class="admin-shell">
     <aside class="admin-sidebar">
-      <div class="admin-brand">3D ADMIN</div>
+      <div class="admin-brand">3Д Печать</div>
       <nav class="admin-nav">
         <a href="admin.html">Дашборд</a>
         <a href="admin-orders.html">Заказы</a>
@@ -24,19 +24,17 @@
     </aside>
     <main class="admin-main">
       <div class="admin-top">
-        <h2 style="margin:0;">Склад (список опций)</h2>
+        <h2 style="margin:0;">Склад (остатки и SKU)</h2>
         <div data-admin-name></div>
       </div>
       <section class="admin-card">
         <div class="filters">
           <select id="warehouse-type">
             <option value="">Все типы</option>
-            <option value="material">Материалы</option>
+            <option value="material_variant">Материалы (варианты)</option>
             <option value="technology">Технологии</option>
-            <option value="color">Цвета</option>
-            <option value="thickness">Толщина</option>
           </select>
-          <input id="warehouse-search" placeholder="Поиск по названию/коду" />
+          <input id="warehouse-search" placeholder="Поиск по названию/коду/материалу" />
           <button class="btn-secondary" id="warehouse-refresh">Обновить</button>
           <button class="btn-primary" id="warehouse-add">Добавить</button>
         </div>
@@ -47,7 +45,19 @@
                 <th>Тип</th>
                 <th>Код</th>
                 <th>Название</th>
-                <th>Цена</th>
+                <th>Технология</th>
+                <th>Материал</th>
+                <th>Цвет</th>
+                <th>Толщина</th>
+                <th>Остаток</th>
+                <th>Резерв</th>
+                <th>Потрачено</th>
+                <th>Доступно</th>
+                <th>Ед.</th>
+                <th>Цена за см3</th>
+                <th>Порог low</th>
+                <th>Порог stop</th>
+                <th>Индикатор</th>
                 <th>Активно</th>
                 <th>Порядок</th>
                 <th>Действие</th>

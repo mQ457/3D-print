@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>3D печать</title>
+  <title>3Д печать</title>
   <link rel="icon" type="image/png" href="image/3D print(1).png">
   <link rel="stylesheet" href="./site.css" />
 </head>
@@ -12,7 +12,7 @@
 <body class="bg-print">
   <header class="landing-header">
     <div class="container landing-header__inner">
-      <div class="landing-brand">3D Print</div>
+      <div class="landing-brand">3Д Печать</div>
 
       <div class="landing-header__actions">
         <a class="btn btn-ghost landing-header__btn" href="print-step-3.html" role="button">Заказать</a>
@@ -27,7 +27,7 @@
     <div class="label" style="margin: 0 0 10px;">Выберите услугу:</div>
 
     <div class="pill-group" role="tablist" aria-label="Выбор услуги">
-      <a class="pill" href="print-step-3.html" role="tab" aria-selected="false">3D печать</a>
+      <a class="pill" href="print-step-3.html" role="tab" aria-selected="false">3Д печать</a>
       <a class="pill is-inactive" href="print-step-2.html" role="tab" aria-selected="false">Моделирование</a>
       <a class="pill is-inactive" href="print-step-1.html" role="tab" aria-selected="false">Сканирование</a>
     </div>
@@ -70,10 +70,10 @@
           </div>
 
           <input type="file" id="model-file-input" class="model-file-input" accept=".stl,.obj,.amf,.3mf,.fbx"
-            aria-label="Выбор файла 3D-модели" />
+            aria-label="Выбор файла 3Д-модели" />
 
           <div id="model-upload-empty" class="model-upload-empty">
-            <button type="button" class="model-upload-trigger" id="model-upload-trigger" aria-label="Загрузить 3D-файл">
+            <button type="button" class="model-upload-trigger" id="model-upload-trigger" aria-label="Загрузить 3Д-файл">
               <span class="img-ph model-upload-trigger__icon">
                 <img src="image/Frame_1_314.png" alt="">
               </span>
@@ -147,6 +147,8 @@
             <span>Предварительная цена:</span>
             <span class="sum">6000 ₽</span>
           </div>
+          <div class="muted-small" style="margin-top:6px;">Объем модели: <span id="model-volume-value">—</span></div>
+          <div class="muted-small" id="pricing-hint" style="margin-top:4px;">Выберите параметры для расчета.</div>
 
           <div class="print-actions">
             <a href="checkout.html" class="btn btn-primary">Перейти к оплате</a>
@@ -159,16 +161,16 @@
   <footer class="site-footer">
     <div class="container site-footer__inner">
       <div>
-        <div class="site-footer__brand">3D Print</div>
+        <div class="site-footer__brand">3Д Печать</div>
         <div class="site-footer__text">
-          Изготавливаем 3D модели и печатаем по вашим файлам. Плейсхолдер текста — подставишь
+          Изготавливаем 3Д модели и печатаем по вашим файлам. Плейсхолдер текста — подставишь
           описание и контакты.
         </div>
       </div>
 
       <div class="site-footer__right">
         <div class="site-footer__contacts">+7 (000) 000-00-00</div>
-        <div class="site-footer__copy">© 2026 3D Print. Все права защищены.</div>
+        <div class="site-footer__copy">© 2026 3Д Печать. Все права защищены.</div>
       </div>
     </div>
   </footer>
