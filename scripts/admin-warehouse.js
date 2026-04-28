@@ -29,30 +29,73 @@
     });
 
     if (filtered.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10">Нет данных</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6">Нет данных</td></tr>';
       return;
     }
 
-    tbody.innerHTML = filtered
-      .map(
-        (item) => `
-      <tr>
+    const groups = new Map();
+    filtered.forEach((item) => {
+      const key = `${item.technologyCode}||${item.materialCode}`;
+      if (!groups.has(key)) {
+        groups.set(key, { key, technologyCode: item.technologyCode, materialCode: item.materialCode, items: [] });
+      }
+      groups.get(key).items.push(item);
+    });
+
+    const htmlParts = [];
+    Array.from(groups.values()).forEach((group, groupIndex) => {
+      const totalStock = group.items.reduce((sum, item) => sum + Number(item.stockQty || 0), 0);
+      const totalAvailable = group.items.reduce((sum, item) => sum + Number(item.availableQty || 0), 0);
+      const stockPercent = totalStock > 0 ? (totalAvailable / totalStock) * 100 : 0;
+      const status = stockPercent >= 60 ? "ok" : stockPercent >= 20 ? "low" : "critical";
+      const rowKey = `g-${groupIndex}`;
+      htmlParts.push(`
+      <tr class="warehouse-group-row">
+        <td>${esc(rowKey)}</td>
+        <td>${esc(group.technologyCode)}</td>
+        <td>${esc(group.materialCode)}</td>
+        <td>${group.items.length}</td>
+        <td>${esc(totalStock)}</td>
+        <td><span class="stock-dot stock-dot--${status}"></span></td>
+        <td><button class="btn-secondary" data-group-toggle="${rowKey}">Показать</button></td>
+      </tr>`);
+      group.items.forEach((item) => {
+        htmlParts.push(`
+      <tr class="warehouse-child-row" data-parent="${rowKey}" style="display:none;">
         <td>${esc(item.shortId || item.id)}</td>
-        <td><input value="${esc(item.technologyCode)}" data-tech-id="${item.id}" /></td>
-        <td><input value="${esc(item.materialCode)}" data-material-id="${item.id}" /></td>
-        <td><input value="${esc(item.colorCode)}" data-color-id="${item.id}" /></td>
-        <td><input type="number" step="0.1" value="${item.thicknessMm != null ? item.thicknessMm : ""}" data-thickness-id="${item.id}" /></td>
-        <td><input type="number" step="0.01" value="${item.stockQty || 0}" data-stock-id="${item.id}" /></td>
-        <td><input value="${esc(item.unit || "g")}" data-unit-id="${item.id}" /></td>
-        <td><input type="number" value="${item.pricePerCm3 || 0}" data-price-id="${item.id}" /></td>
+        <td colspan="2" style="min-width:260px;">
+          <div class="warehouse-child-grid">
+            <input value="${esc(item.colorCode)}" data-color-id="${item.id}" />
+            <input type="number" step="0.1" value="${item.thicknessMm != null ? item.thicknessMm : ""}" data-thickness-id="${item.id}" />
+            <input type="number" step="0.01" value="${item.stockQty || 0}" data-stock-id="${item.id}" />
+            <input value="${esc(item.unit || "g")}" data-unit-id="${item.id}" />
+            <input type="number" value="${item.pricePerCm3 || 0}" data-price-id="${item.id}" />
+          </div>
+        </td>
+        <td>${esc(item.availableQty)}</td>
+        <td>${esc(item.stockQty)}</td>
         <td><span class="stock-dot stock-dot--${item.stockStatus || "ok"}"></span></td>
         <td>
           <button class="btn-secondary" data-save-id="${item.id}">Сохранить</button>
           <button class="btn-secondary" data-delete-id="${item.id}">Удалить</button>
         </td>
-      </tr>`
-      )
-      .join("");
+      </tr>`);
+      });
+    });
+    tbody.innerHTML = htmlParts.join("");
+
+    tbody.querySelectorAll("[data-group-toggle]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const key = button.getAttribute("data-group-toggle");
+        const rows = tbody.querySelectorAll(`.warehouse-child-row[data-parent="${key}"]`);
+        if (!rows.length) return;
+        const opened = Array.from(rows).some((row) => row.style.display !== "none");
+        rows.forEach((row) => {
+          row.style.display = opened ? "none" : "table-row";
+        });
+        button.textContent = opened ? "Показать" : "Скрыть";
+      });
+    });
 
     tbody.querySelectorAll("[data-save-id]").forEach((button) => {
       button.addEventListener("click", async () => {
@@ -63,11 +106,9 @@
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            name: `${tbody.querySelector(`[data-material-id="${id}"]`)?.value || ""} ${tbody.querySelector(`[data-color-id="${id}"]`)?.value || ""} ${tbody
-              .querySelector(`[data-thickness-id="${id}"]`)
-              ?.value || ""}мм`,
-            technologyCode: tbody.querySelector(`[data-tech-id="${id}"]`)?.value || "",
-            materialCode: tbody.querySelector(`[data-material-id="${id}"]`)?.value || "",
+            name: `${current.materialCode || ""} ${tbody.querySelector(`[data-color-id="${id}"]`)?.value || ""} ${tbody.querySelector(`[data-thickness-id="${id}"]`)?.value || ""}мм`,
+            technologyCode: current.technologyCode || "",
+            materialCode: current.materialCode || "",
             colorCode: tbody.querySelector(`[data-color-id="${id}"]`)?.value || "",
             thicknessMm: tbody.querySelector(`[data-thickness-id="${id}"]`)?.value || null,
             stockQty: Number(tbody.querySelector(`[data-stock-id="${id}"]`)?.value || 0),

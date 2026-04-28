@@ -307,6 +307,16 @@ textarea {
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
 }
 
+.warehouse-group-row {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.warehouse-child-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 90px 1fr;
+  gap: 6px;
+}
+
 .admin-modal[hidden] {
   display: none;
 }
